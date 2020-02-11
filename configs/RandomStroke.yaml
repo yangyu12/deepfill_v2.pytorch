@@ -1,0 +1,5 @@
+_BASE_: "./GatedCNN-Base.yaml"
+INPUT:
+  TRAIN_MASK_TYPE: "random_stroke"
+OUTPUT_DIR: "./output/gated_cnn_sn_patch_gan_random_stroke"
+

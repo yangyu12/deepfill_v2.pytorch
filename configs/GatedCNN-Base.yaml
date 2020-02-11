@@ -1,0 +1,28 @@
+MODEL:
+  META_ARCHITECTURE: "GatedCNNSNPatchGAN"
+  INPAINTER:
+    GENERATOR:
+      NAME: "GatedCNN"
+    DISCRIMINATOR:
+      NAME: "SNPatchDiscriminator"
+DATASETS:
+  TRAIN: ("places2_train",)
+  TEST: ("places2_test",)
+DATALOADER:
+  FILTER_EMPTY_ANNOTATIONS: False
+SOLVER:
+  IMS_PER_BATCH: 4
+  BASE_LR: 0.0001
+  BETAS: (0.5, 0.999)
+  MAX_ITER: 72000
+INPUT:
+  MAX_SIZE_TRAIN: 512
+  MAX_SIZE_TEST: 448
+  CROP:
+    ENABLED: True
+    TYPE: "absolute"
+    SIZE: [448, 448]
+  TRAIN_MASK_TYPE: "random_stroke"
+SEED: 490596443
+OUTPUT_DIR: "./output/gated_cnn_sn_patch_gan"
+
