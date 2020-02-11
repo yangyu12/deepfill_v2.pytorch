@@ -27,7 +27,8 @@ Below are the results, from left to right are masked image,
 inpainted image by this repo, inpainted image by original repo
 respectively. It could be noticed that the results produced in
 this repo are blurred.
-<img src="https://raw.githubusercontent.com/yangyu12/deepfill_v2.pytorch/master/examples/places2/case1_input.png" width="33%"/> <img src="./demo_outputs/case1_output.png" width="33%"/> <img src="./examples/places2/case1_output.png" width="33%"/>
+
+<img src="./examples/places2/case1_input.png" width="33%"/> <img src="./demo_outputs/case1_output.png" width="33%"/> <img src="./examples/places2/case1_output.png" width="33%"/>
 <img src="./examples/places2/case2_input.png" width="33%"/> <img src="./demo_outputs/case2_output.png" width="33%"/> <img src="./examples/places2/case2_output.png" width="33%"/>
 <img src="./examples/places2/case3_input.png" width="33%"/> <img src="./demo_outputs/case3_output.png" width="33%"/> <img src="./examples/places2/case3_output.png" width="33%"/>
 <img src="./examples/places2/case4_input.png" width="33%"/> <img src="./demo_outputs/case4_output.png" width="33%"/> <img src="./examples/places2/case4_output.png" width="33%"/>
