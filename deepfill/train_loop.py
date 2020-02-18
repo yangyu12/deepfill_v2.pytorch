@@ -3,10 +3,11 @@ import logging
 import time
 from typing import Any, Dict, List
 import torch
+from fvcore.nn.precise_bn import get_bn_modules
 
 from detectron2.engine import DefaultTrainer, hooks
 from detectron2.data import build_detection_train_loader, build_detection_test_loader
-
+from detectron2.utils import comm
 
 from .dataset import InpainterDatasetMapper
 from .inpainting_evaluation import InpaintingEvaluator
@@ -19,8 +20,51 @@ class InpainterTrainer(DefaultTrainer):
         self.generator_optimizer = g_optm
         self.discriminator_optimizer = d_optm
 
-        # delete LRSchedule hook
-        self._hooks = [h for h in self._hooks if not isinstance(h, hooks.LRScheduler)]
+    @classmethod
+    def build_lr_scheduler(cls, cfg, optimizer):
+        return None
+
+    def build_hooks(self):
+        """
+        Only delete the LRScheduler hook
+        """
+        cfg = self.cfg.clone()
+        cfg.defrost()
+        cfg.DATALOADER.NUM_WORKERS = 0  # save some memory and time for PreciseBN
+
+        ret = [
+            hooks.IterationTimer(),
+            hooks.PreciseBN(
+                # Run at the same freq as (but before) evaluation.
+                cfg.TEST.EVAL_PERIOD,
+                self.model,
+                # Build a new data loader to not affect training
+                self.build_train_loader(cfg),
+                cfg.TEST.PRECISE_BN.NUM_ITER,
+            )
+            if cfg.TEST.PRECISE_BN.ENABLED and get_bn_modules(self.model)
+            else None,
+        ]
+
+        # Do PreciseBN before checkpointer, because it updates the model and need to
+        # be saved by checkpointer.
+        # This is not always the best: if checkpointing has a different frequency,
+        # some checkpoints may have more precise statistics than others.
+        if comm.is_main_process():
+            ret.append(hooks.PeriodicCheckpointer(self.checkpointer, cfg.SOLVER.CHECKPOINT_PERIOD))
+
+        def test_and_save_results():
+            self._last_eval_results = self.test(self.cfg, self.model)
+            return self._last_eval_results
+
+        # Do evaluation after checkpointer, because then if it fails,
+        # we can use the saved checkpoint to debug.
+        ret.append(hooks.EvalHook(cfg.TEST.EVAL_PERIOD, test_and_save_results))
+
+        if comm.is_main_process():
+            # run writers in the end, so that evaluation metrics are written
+            ret.append(hooks.PeriodicWriter(self.build_writers()))
+        return ret
 
     @classmethod
     def build_train_loader(cls, cfg):
@@ -36,8 +80,8 @@ class InpainterTrainer(DefaultTrainer):
 
     def only_load_model(self):
         checkpoint = self.checkpointer._load_file(self.cfg.MODEL.WEIGHTS)
+        checkpoint["matching_heuristics"] = True
         self.checkpointer._load_model(checkpoint)
-        # TODO: method that automatically remap weight names should be written
         logger = logging.getLogger(__name__)
         logger.info("Loaded model from {}".format(self.cfg.MODEL.WEIGHTS))
 
@@ -84,15 +128,15 @@ class InpainterTrainer(DefaultTrainer):
         self._write_metrics(metrics_dict)
 
         """
+        One step for discriminator
+        """
+        self.discriminator_optimizer.zero_grad()
+        loss_dict["discriminator_loss"].backward(retain_graph=True)
+        self.discriminator_optimizer.step()
+
+        """
         One step for generator
         """
         self.generator_optimizer.zero_grad()
         loss_dict["generator_loss"].backward()
         self.generator_optimizer.step()
-
-        """
-        One step for discriminator
-        """
-        self.discriminator_optimizer.zero_grad()
-        loss_dict["discriminator_loss"].backward()
-        self.discriminator_optimizer.step()

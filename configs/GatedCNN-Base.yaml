@@ -7,22 +7,20 @@ MODEL:
       NAME: "SNPatchDiscriminator"
 DATASETS:
   TRAIN: ("places2_train",)
-  TEST: ("places2_test",)
+  TEST: ("places2_val",)
 DATALOADER:
   FILTER_EMPTY_ANNOTATIONS: False
 SOLVER:
-  IMS_PER_BATCH: 4
+  IMS_PER_BATCH: 16
   BASE_LR: 0.0001
   BETAS: (0.5, 0.999)
-  MAX_ITER: 72000
+  MAX_ITER: 100000000  # 100,000,000
 INPUT:
-  MAX_SIZE_TRAIN: 512
-  MAX_SIZE_TEST: 448
   CROP:
     ENABLED: True
     TYPE: "absolute"
-    SIZE: [448, 448]
-  TRAIN_MASK_TYPE: "random_stroke"
+    SIZE: [256, 256]
+  TRAIN_MASK_TYPE: "random_regular"
 SEED: 490596443
 OUTPUT_DIR: "./output/gated_cnn_sn_patch_gan"
 

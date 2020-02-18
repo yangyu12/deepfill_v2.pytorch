@@ -1,0 +1,6 @@
+_BASE_: "./GatedCNN-Base.yaml"
+MODEL:
+  META_ARCHITECTURE: "tf_GatedCNNSNPatchGAN"
+  WEIGHTS: "./output/pretrained/tf_places2_256_deepfill_v2.pth"
+OUTPUT_DIR: "./output/pretrained_eval_tf"
+

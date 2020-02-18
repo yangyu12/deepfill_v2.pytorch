@@ -43,6 +43,8 @@ class GatedConv2d(torch.nn.Conv2d):
         # double the out_channels for gate
         self.num_channels = args[1]
         new_args = args[:1] + (2 * args[1], ) + args[2:]
+        self.manual_stride = kwargs.pop("stride", 1)
+        kwargs["stride"] = 1
         super().__init__(*new_args, **kwargs)
 
         self.norm = norm
@@ -76,6 +78,11 @@ class GatedConv2d(torch.nn.Conv2d):
                 return empty
 
         x = super().forward(x)
+        if self.manual_stride > 1:
+            #
+            assert self.manual_stride == 2, f"Not support stride except 1 or 2 but got {self.manual_stride}"
+            x = x[:, :, 1::2, 1::2]
+
         x, g = torch.split(x, self.num_channels, dim=1)
         if self.norm is not None:
             x = self.norm(x)
@@ -129,15 +136,15 @@ class ContextAttention(torch.nn.Module):
 
     def forward(self, fg_feature, bg_feature, masks):
         """
-
         :param fg_feature:
         :param bg_feature:
         :param mask:
         :return:
         """
         # 1. extract patches (2d x 2d) in background and reshape them as de-conv kernels
+        # bg_feature = F.pad(bg_feature, pad=[1, 2, 1, 2])
         deconv_weights = F.unfold(
-            bg_feature, kernel_size=self.deconv_kernel_size, stride=self.stride, padding=self.unfold_deconv_padding
+            bg_feature, kernel_size=self.deconv_kernel_size, stride=2, padding=self.unfold_deconv_padding
         )  # Tensor(N, C*2s*2s, (H/s)*(W/s))
         # out_h = (h + 2*ph - (k-1) - 1) / s + 1. let out_h = h/s --> ph = (k - s) / 2
         deconv_weights = self.reshape_to_batch_kernels(
@@ -146,10 +153,10 @@ class ContextAttention(torch.nn.Module):
 
         # 2. downscaling foreground option: downscaling both foreground and background for matching
         # both are Tensor(N, C, H/s, W/s)
-        fg_feature = F.interpolate(fg_feature, scale_factor=self.downsampling_scale)
-        bg_feature = F.interpolate(bg_feature, scale_factor=self.downsampling_scale)
-        # Note: the gradient problem may only exist for tf framework
-        masks = F.interpolate(masks, scale_factor=self.downsampling_scale)  # Tensor(N, 1, H/s, W/s)
+        # TODO: this adaption is only for evaluating pretrained model
+        fg_feature = align_corners_2x_nearest_downsample(fg_feature)
+        bg_feature = align_corners_2x_nearest_downsample(bg_feature)
+        masks = align_corners_2x_nearest_downsample(masks)  # Tensor(N, 1, H/s, W/s)
 
         # 3. extract patches (k x k) from downsampled background and reshape them as conv kernels
         conv_weights = F.unfold(
@@ -197,7 +204,8 @@ class ContextAttention(torch.nn.Module):
                 corr_response, deconv_w_per_im, stride=self.stride, padding=self.deconv_padding
             )  # out_h = (h / s - 1) * s - 2 * ph + (k - 1) + oph + 1. let out_h = h and oph = 0 --> ph = (k-s)/2 = s/2
 
-            reconstructed_features.append(rec_feature / 4.)  # TODO: 4. seems to be arbitrary
+            reconstructed_features.append(rec_feature / 4.)
+            # for the reason why it should be divided by 4, refer to https://github.com/JiahuiYu/generative_inpainting/issues/294
             matched_inds.append(matched_ind)
 
         return cat(reconstructed_features, dim=0), torch.stack(matched_inds, dim=0)
@@ -231,3 +239,25 @@ class ContextAttention(torch.nn.Module):
 # https://github.com/knazeri/edge-connect/blob/ffdd3081db166d6954cc4e0254cfb04d24a2cb18/src/networks.py#L208
 def SpectralNormConv2d(*args, **kwargs):
     return torch.nn.utils.spectral_norm(Conv2d(*args, **kwargs))
+
+
+def align_corners_2x_nearest_downsample(x):
+    """This is because the official pytorch nearest interpolate doesn't su
+    """
+    assert x.ndim == 4
+    src_H, src_W = x.shape[2:]
+    trg_H, trg_W = src_H // 2, src_W // 2
+    h_inds = torch.linspace(0, src_H-1, steps=trg_H, device=x.device).add(0.5).floor().long()
+    w_inds = torch.linspace(0, src_W-1, steps=trg_W, device=x.device).add(0.5).floor().long()
+    h_inds, w_inds = torch.meshgrid(h_inds, w_inds)
+    return x[:, :, h_inds, w_inds]
+
+
+def align_corners_4x_nearest_downsample(x):
+    assert x.ndim == 4
+    src_H, src_W = x.shape[2:]
+    trg_H, trg_W = src_H // 4, src_W // 4
+    h_inds = torch.linspace(0, src_H - 1, steps=trg_H, device=x.device).add(0.5).floor().long()
+    w_inds = torch.linspace(0, src_W - 1, steps=trg_W, device=x.device).add(0.5).floor().long()
+    h_inds, w_inds = torch.meshgrid(h_inds, w_inds)
+    return x[:, :, h_inds, w_inds]

@@ -7,7 +7,13 @@ from detectron2.structures import ImageList
 from detectron2.modeling.postprocessing import sem_seg_postprocess
 from detectron2.layers import Conv2d, ShapeSpec
 
-from .layers import GatedConv2d, GatedDeConv2d, ContextAttention, SpectralNormConv2d
+from .layers import (
+    GatedConv2d,
+    GatedDeConv2d,
+    ContextAttention,
+    SpectralNormConv2d,
+    align_corners_4x_nearest_downsample
+)
 
 
 @META_ARCH_REGISTRY.register()
@@ -71,7 +77,7 @@ class GatedCNNSNPatchGAN(nn.Module):
             return losses
         else:
             processed_results = []
-            inpainted_im = erased_ims * (1. - masks.tensor) + coarse_inp * masks.tensor
+            inpainted_im = erased_ims * (1. - masks.tensor) + fine_inp * masks.tensor
             for result, input_per_image, image_size in zip(inpainted_im, batched_inputs, images.image_sizes):
                 height = input_per_image.get("height")
                 width = input_per_image.get("width")
@@ -92,8 +98,6 @@ class GatedCNNSNPatchGAN(nn.Module):
 """
 generator
 """
-
-
 class GatedCNN(nn.Module):
     def __init__(self, cfg, input_shape: ShapeSpec):
         super().__init__()
@@ -181,7 +185,8 @@ class GatedCNN(nn.Module):
         # branch a: contextual attention
         to_refine = coarse_inp * masks + x[:, :3, :, :] * (1. - masks)
         x = self.refinement_ctx_branch_1(to_refine)
-        masks = F.interpolate(masks, scale_factor=1./4.)
+        # masks = F.interpolate(masks, scale_factor=1./4.)
+        masks = align_corners_4x_nearest_downsample(masks)
         x, offset_flow = self.ctx_module(x, x, masks)
         ctx_out = self.refinement_ctx_branch_2(x)  # pm
         # branch b: gated conv
@@ -195,8 +200,6 @@ class GatedCNN(nn.Module):
 """
 discriminator
 """
-
-
 class SNPatchDiscriminator(nn.Module):
     def __init__(self, cfg, input_shape: ShapeSpec):
         super().__init__()

@@ -20,20 +20,7 @@ import detectron2.data.transforms as T
 class InpainterDatasetMapper:
     def __init__(self, cfg, is_train=True):
         # build_transform_gen
-        if is_train:
-            max_size = cfg.INPUT.MAX_SIZE_TRAIN  # currently only square shape
-        else:
-            # TODO: multi-scale test
-            max_size = cfg.INPUT.MAX_SIZE_TEST
         logger = logging.getLogger(__name__)
-        tfm_gens = []
-        tfm_gens.append(T.Resize(max_size))
-        if is_train:
-            tfm_gens.append(T.RandomFlip())
-            logger.info("TransformGens used in training: " + str(tfm_gens))
-        else:
-            logger.info("TransformGens used in test: " + str(tfm_gens))
-        self.tfm_gens = tfm_gens
 
         # random crop augmentation
         if cfg.INPUT.CROP.ENABLED and is_train:
@@ -45,7 +32,6 @@ class InpainterDatasetMapper:
         self.img_format         = cfg.INPUT.FORMAT
         self.is_train           = is_train
         self.mask_type          = cfg.INPUT.TRAIN_MASK_TYPE
-        self.max_shift          = cfg.INPUT.MAX_SHIFT
 
         # TODO: configure it
         self.min_num_vertex     = 4
@@ -69,9 +55,8 @@ class InpainterDatasetMapper:
 
         # first resize, then crop
         if self.is_train:
-            assert "annotations" not in dataset_dict
             image, transforms = T.apply_transform_gens(
-                self.tfm_gens + ([self.crop_gen] if self.crop_gen else []), image
+                ([self.crop_gen] if self.crop_gen else []), image
             )
 
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,

@@ -14,8 +14,6 @@ from deepfill.config import add_inpainter_config
 from deepfill.train_loop import InpainterTrainer
 from deepfill import inpnet, dataset
 
-import os
-os.path.basename()
 
 def setup(args):
     """
